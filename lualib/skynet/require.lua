@@ -20,12 +20,13 @@ do
 	local loaded = package.loaded
 	local loading = {}
 
-	function M.require(name)
+	function M.require(name) -- 闭包
 		local m = loaded[name]
 		if m ~= nil then
 			return m
 		end
 
+		-- 主线程直接调用_G.require
 		local co, main = coroutine.running()
 		if main then
 			return require(name)
@@ -41,6 +42,7 @@ do
 			return require(name)
 		end
 
+		-- 其他协程正在加载则挂起
 		local loading_queue = loading[name]
 		if loading_queue then
 			assert(loading_queue.co ~= co, "circular dependency")
@@ -58,14 +60,28 @@ do
 		loading_queue = {co = co}
 		loading[name] = loading_queue
 
+		-- require脚本时可能递归调用require，防止覆盖上下文，闭包内暂存old_init_list
 		local old_init_list = context[co]
 		local init_list = {}
 		context[co] = init_list
 
-		-- We should call modfunc in lua, because modfunc may yield by calling M.require recursive.
 		local function execute_module()
+			-- 执行脚本
 			local m = modfunc(name, filename)
 
+			--[[
+			skynet.init用于注册函数，在模块加载完之前执行，见skynet.init_service
+			skynet.init使用场景举例：
+			=== new_service.lua ===
+				local mc = require "skynet.multicast"
+				skynet.start(funciton modfunc()
+					-- do something...
+				end)
+				-- multicast.lua加载时会调用skynet.init注删函数查询multicastd服务的地址，挂起直至查询返回，因此init_list执行完之后rquire不会返回
+				-- 如果脚本内使用了skynet.init，require必须在skynet.start前调用
+			=======================
+			]]--
+			-- 调用脚本使用skynet.init注册的函数
 			for _, f in ipairs(init_list) do
 				f()
 			end
@@ -81,6 +97,7 @@ do
 
 		context[co] = old_init_list
 
+		-- 唤醒正在等待该模块的协程
 		local waiting = #loading_queue
 		if waiting > 0 then
 			local skynet = require "skynet"

@@ -406,15 +406,19 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 
 	lua_gc(L, LUA_GCGEN, 0, 0);
 
+	// PATH
 	const char *path = optstring(ctx, "lua_path","./lualib/?.lua;./lualib/?/init.lua");
 	lua_pushstring(L, path);
 	lua_setglobal(L, "LUA_PATH");
+	// CPATH
 	const char *cpath = optstring(ctx, "lua_cpath","./luaclib/?.so");
 	lua_pushstring(L, cpath);
 	lua_setglobal(L, "LUA_CPATH");
+	// Lua服务加载路径
 	const char *service = optstring(ctx, "luaservice", "./service/?.lua");
 	lua_pushstring(L, service);
 	lua_setglobal(L, "LUA_SERVICE");
+	// 每个服务执行前执行的脚本preload.lua
 	const char *preload = skynet_command(ctx, "GETENV", "preload");
 	lua_pushstring(L, preload);
 	lua_setglobal(L, "LUA_PRELOAD");

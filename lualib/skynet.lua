@@ -931,7 +931,9 @@ skynet.pcall = pcall
 
 function skynet.init_service(start)
 	local function main()
+		-- 执行init_list
 		skynet_require.init_all()
+		-- 启动服务
 		start()
 	end
 	local ok, err = xpcall(main, traceback)
@@ -944,6 +946,8 @@ function skynet.init_service(start)
 	end
 end
 
+-- skynet.start之前可以通过skynet.init注册函数用于从其他服务获取信息，在start_func调用之前执行
+-- 如果在start_func里面调用skynet.init，注册的函数会在下一次调用skynet.init_service时才会执行
 function skynet.start(start_func)
 	c.callback(skynet.dispatch_message)
 	init_thread = skynet.timeout(0, function()
