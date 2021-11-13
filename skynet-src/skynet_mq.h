@@ -11,7 +11,7 @@ struct skynet_message {
 	size_t sz;
 };
 
-// type is encoding in skynet_message.sz high 8bit
+// 前8位为类型，后56位为消息长度
 #define MESSAGE_TYPE_MASK (SIZE_MAX >> 8)
 #define MESSAGE_TYPE_SHIFT ((sizeof(size_t)-1) * 8)
 

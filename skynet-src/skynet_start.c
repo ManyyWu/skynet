@@ -19,18 +19,18 @@
 #include <signal.h>
 
 struct monitor {
-	int count;
-	struct skynet_monitor ** m;
+	int count;                  // 服务监视器数量
+	struct skynet_monitor ** m; // 服务监视器数组
 	pthread_cond_t cond;
 	pthread_mutex_t mutex;
-	int sleep;
-	int quit;
+	int sleep;                  // 睡眠的worker线程数量
+	int quit;                   // 程序退出标志
 };
 
 struct worker_parm {
-	struct monitor *m;
-	int id;
-	int weight;
+	struct monitor *m; // 监视器
+	int id;            // worker id
+	int weight;        // 权重
 };
 
 static volatile int SIG = 0;
@@ -42,6 +42,7 @@ handle_hup(int signal) {
 	}
 }
 
+// 服务全部关闭时关闭所有线程
 #define CHECK_ABORT if (skynet_context_total()==0) break;
 
 static void
@@ -72,6 +73,7 @@ thread_socket(void *p) {
 			CHECK_ABORT
 			continue;
 		}
+		// 当所有线程都挂起时，唤醒一个worker线程处理消息
 		wakeup(m,0);
 	}
 	return NULL;
@@ -96,6 +98,7 @@ thread_monitor(void *p) {
 	int i;
 	int n = m->count;
 	skynet_initthread(THREAD_MONITOR);
+	// 每5秒检查一次
 	for (;;) {
 		CHECK_ABORT
 		for (i=0;i<n;i++) {
@@ -133,6 +136,7 @@ thread_timer(void *p) {
 		skynet_updatetime();
 		skynet_socket_updatetime();
 		CHECK_ABORT
+		// 唤醒所有worker线程处理timer消息
 		wakeup(m,m->count-1);
 		usleep(2500);
 		if (SIG) {
@@ -140,9 +144,9 @@ thread_timer(void *p) {
 			SIG = 0;
 		}
 	}
-	// wakeup socket thread
+	// 唤醒网络线程
 	skynet_socket_exit();
-	// wakeup all worker thread
+	// 唤醒所有worker
 	pthread_mutex_lock(&m->mutex);
 	m->quit = 1;
 	pthread_cond_broadcast(&m->cond);
@@ -160,6 +164,7 @@ thread_worker(void *p) {
 	skynet_initthread(THREAD_WORKER);
 	struct message_queue * q = NULL;
 	while (!m->quit) {
+		// 循环从消息队列pop消息处理，全局队列为空时挂起
 		q = skynet_context_message_dispatch(sm, q, weight);
 		if (q == NULL) {
 			if (pthread_mutex_lock(&m->mutex) == 0) {
@@ -183,11 +188,11 @@ static void
 start(int thread) {
 	pthread_t pid[thread+3];
 
+    // 创建监视器，用于监视死锁或死循环
 	struct monitor *m = skynet_malloc(sizeof(*m));
 	memset(m, 0, sizeof(*m));
 	m->count = thread;
 	m->sleep = 0;
-
 	m->m = skynet_malloc(thread * sizeof(struct skynet_monitor *));
 	int i;
 	for (i=0;i<thread;i++) {
@@ -202,8 +207,11 @@ start(int thread) {
 		exit(1);
 	}
 
+    // 创建监视器线程
 	create_thread(&pid[0], thread_monitor, m);
+	// 创建定时器线程
 	create_thread(&pid[1], thread_timer, m);
+	// 创建网络线程
 	create_thread(&pid[2], thread_socket, m);
 
 	static int weight[] = { 
@@ -212,6 +220,7 @@ start(int thread) {
 		2, 2, 2, 2, 2, 2, 2, 2, 
 		3, 3, 3, 3, 3, 3, 3, 3, };
 	struct worker_parm wp[thread];
+	// 创建worker线程
 	for (i=0;i<thread;i++) {
 		wp[i].m = m;
 		wp[i].id = i;
@@ -222,11 +231,11 @@ start(int thread) {
 		}
 		create_thread(&pid[i+3], thread_worker, &wp[i]);
 	}
-
+    // 等待所有线程结束
 	for (i=0;i<thread+3;i++) {
 		pthread_join(pid[i], NULL); 
 	}
-
+    // 释放监视器
 	free_monitor(m);
 }
 
@@ -236,6 +245,8 @@ bootstrap(struct skynet_context * logger, const char * cmdline) {
 	char name[sz+1];
 	char args[sz+1];
 	int arg_pos;
+	// 默认配置下，启动snlua服务，参数为bootstrap
+	// snlua服务将会执行service/bootstrap.lua脚本
 	sscanf(cmdline, "%s", name);  
 	arg_pos = strlen(name);
 	if (arg_pos < sz) {
@@ -249,6 +260,7 @@ bootstrap(struct skynet_context * logger, const char * cmdline) {
 	struct skynet_context *ctx = skynet_context_new(name, args);
 	if (ctx == NULL) {
 		skynet_error(NULL, "Bootstrap error : %s\n", cmdline);
+		// 主线程直接调用logger->cb打印日志
 		skynet_context_dispatchall(logger);
 		exit(1);
 	}
@@ -256,41 +268,52 @@ bootstrap(struct skynet_context * logger, const char * cmdline) {
 
 void 
 skynet_start(struct skynet_config * config) {
-	// register SIGHUP for log file reopen
+	// 注册SIGHUP处理函数，用来重新打开log文件
 	struct sigaction sa;
 	sa.sa_handler = &handle_hup;
 	sa.sa_flags = SA_RESTART;
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGHUP, &sa, NULL);
 
+    // 初始化守护进程
 	if (config->daemon) {
 		if (daemon_init(config->daemon)) {
 			exit(1);
 		}
 	}
+	// 初始化节点标识符
 	skynet_harbor_init(config->harbor);
+	// 初始化服务管理器H（用于存储各种服务）
 	skynet_handle_init(config->harbor);
+	// 初始化全局消息队列
 	skynet_mq_init();
+	// 初始化C模块管理器M（包括C模块和lua模拟）
 	skynet_module_init(config->module_path);
+	// 初始化定时器
 	skynet_timer_init();
+	// 初始化网络模块
 	skynet_socket_init();
+	// 初始化统计日志开关
 	skynet_profile_enable(config->profile);
-
+    // 创建第一个服务logger.so
 	struct skynet_context *ctx = skynet_context_new(config->logservice, config->logger);
 	if (ctx == NULL) {
 		fprintf(stderr, "Can't launch %s service\n", config->logservice);
 		exit(1);
 	}
-
+    // 设置服务名
 	skynet_handle_namehandle(skynet_context_handle(ctx), "logger");
-
+    // 创建引导加载服务snlua.so，这时候还没启动logger服务，需要传入ctx指针用于打印日志
 	bootstrap(ctx, config->bootstrap);
-
+    // 创建各种线程，并等待所有线程结束
 	start(config->thread);
 
 	// harbor_exit may call socket send, so it should exit before socket_free
+	// 关闭harbor
 	skynet_harbor_exit();
+	// 关闭网络模块
 	skynet_socket_free();
+	// 删除pid文件
 	if (config->daemon) {
 		daemon_exit(config->daemon);
 	}

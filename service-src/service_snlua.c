@@ -383,14 +383,23 @@ static int
 init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t sz) {
 	lua_State *L = l->L;
 	l->ctx = ctx;
+	// 关闭GC
 	lua_gc(L, LUA_GCSTOP, 0);
+	/*
+	* 使用lua全局table作为标记
+	* https://blog.codingnow.com/2006/11/lua_c.html
+	* https://hytc1106hwc.github.io/lua/how-to-write-c-functions/registry-usage/
+	* https://blog.codingnow.com/2006/01/_lua.html
+	*/
 	lua_pushboolean(L, 1);  /* signal for libraries to ignore env. vars. */
 	lua_setfield(L, LUA_REGISTRYINDEX, "LUA_NOENV");
+	// 加载所有必要的lua库
 	luaL_openlibs(L);
+  // 将init_profile作为skynet.profile作为库导入lua
 	luaL_requiref(L, "skynet.profile", init_profile, 0);
 
 	int profile_lib = lua_gettop(L);
-	// replace coroutine.resume / coroutine.wrap
+	// 替换coroutine.resume, coroutine.wrap
 	lua_getglobal(L, "coroutine");
 	lua_getfield(L, profile_lib, "resume");
 	lua_setfield(L, -2, "resume");
@@ -399,8 +408,11 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 
 	lua_settop(L, profile_lib-1);
 
+  // 将ctx导入虚拟机
 	lua_pushlightuserdata(L, ctx);
 	lua_setfield(L, LUA_REGISTRYINDEX, "skynet_context");
+
+  // 将codecache作为skynet.codecache作为库导入lua
 	luaL_requiref(L, "skynet.codecache", codecache , 0);
 	lua_pop(L,1);
 
@@ -426,9 +438,9 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 	lua_pushcfunction(L, traceback);
 	assert(lua_gettop(L) == 1);
 
+  // 加载loader.lua, 参数为"bootstrap"
 	const char * loader = optstring(ctx, "lualoader", "./lualib/loader.lua");
-
-	int r = luaL_loadfile(L,loader);
+	int r = luaL_loadfile(L,loader); // 出错时调用栈底的traceback
 	if (r != LUA_OK) {
 		skynet_error(ctx, "Can't load %s : %s", loader, lua_tostring(L, -1));
 		report_launcher_error(ctx);
@@ -460,9 +472,11 @@ static int
 launch_cb(struct skynet_context * context, void *ud, int type, int session, uint32_t source , const void * msg, size_t sz) {
 	assert(type == 0 && session == 0);
 	struct snlua *l = ud;
+	// 防止下次调用
 	skynet_callback(context, NULL, NULL);
 	int err = init_cb(l, context, msg, sz);
 	if (err) {
+		// 失败时关闭自己
 		skynet_command(context, "EXIT", NULL);
 	}
 
@@ -474,10 +488,12 @@ snlua_init(struct snlua *l, struct skynet_context *ctx, const char * args) {
 	int sz = strlen(args);
 	char * tmp = skynet_malloc(sz);
 	memcpy(tmp, args, sz);
-	skynet_callback(ctx, l , launch_cb);
+	// lua虚拟机作为回调的参数
+	skynet_callback(ctx, l, launch_cb);
+	// 查询snlua的服务标识符
 	const char * self = skynet_command(ctx, "REG", NULL);
 	uint32_t handle_id = strtoul(self+1, NULL, 16);
-	// it must be first message
+	// 第一条消息发给自己调用cmd_reg()
 	skynet_send(ctx, 0, handle_id, PTYPE_TAG_DONTCOPY,0, tmp, sz);
 	return 0;
 }
@@ -508,6 +524,7 @@ snlua_create(void) {
 	memset(l,0,sizeof(*l));
 	l->mem_report = MEMORY_WARNING_REPORT;
 	l->mem_limit = 0;
+	// 为snlua服务创建lua虚拟机
 	l->L = lua_newstate(lalloc, l);
 	l->activeL = NULL;
 	ATOM_INIT(&l->trap , 0);

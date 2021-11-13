@@ -21,7 +21,7 @@ check_pid(const char *pidfile) {
 	if (n !=1 || pid == 0 || pid == getpid()) {
 		return 0;
 	}
-
+    // 向pid进程发送信号0，检查进程是否存在
 	if (kill(pid, 0) && errno == ESRCH)
 		return 0;
 
@@ -92,8 +92,8 @@ redirect_fds() {
 
 int
 daemon_init(const char *pidfile) {
+	// 防止启动多个守护进程
 	int pid = check_pid(pidfile);
-
 	if (pid) {
 		fprintf(stderr, "Skynet is already running, pid = %d.\n", pid);
 		return 1;
@@ -102,17 +102,19 @@ daemon_init(const char *pidfile) {
 #ifdef __APPLE__
 	fprintf(stderr, "'daemon' is deprecated: first deprecated in OS X 10.5 , use launchd instead.\n");
 #else
+    // 创建守护进程
 	if (daemon(1,1)) {
 		fprintf(stderr, "Can't daemonize.\n");
 		return 1;
 	}
 #endif
-
+    // 向pid文件写入pid
 	pid = write_pid(pidfile);
 	if (pid == 0) {
 		return 1;
 	}
 
+    // 将标准输入输出重定向到/dev/null
 	if (redirect_fds()) {
 		return 1;
 	}

@@ -13,10 +13,10 @@
 #define MAX_MODULE_TYPE 32
 
 struct modules {
-	int count;
-	struct spinlock lock;
-	const char * path;
-	struct skynet_module m[MAX_MODULE_TYPE];
+	int count;                               // 模块数量
+	struct spinlock lock;                    // 锁
+	const char * path;                       // 路径
+	struct skynet_module m[MAX_MODULE_TYPE]; // C模块数组
 };
 
 static struct modules * M = NULL;
@@ -111,11 +111,13 @@ skynet_module_query(const char * name) {
 
 	if (result == NULL && M->count < MAX_MODULE_TYPE) {
 		int index = M->count;
+		// 加载.so模块
 		void * dl = _try_open(M,name);
 		if (dl) {
 			M->m[index].name = name;
 			M->m[index].module = dl;
 
+      // 加载函数
 			if (open_sym(&M->m[index]) == 0) {
 				M->m[index].name = skynet_strdup(name);
 				M->count ++;
@@ -147,7 +149,7 @@ skynet_module_instance_create(struct skynet_module *m) {
 	if (m->create) {
 		return m->create();
 	} else {
-		return (void *)(intptr_t)(~0);
+		return (void *)(intptr_t)(~~0);
 	}
 }
 

@@ -41,32 +41,32 @@
 #endif
 
 struct skynet_context {
-	void * instance;
-	struct skynet_module * mod;
-	void * cb_ud;
-	skynet_cb cb;
-	struct message_queue *queue;
-	ATOM_POINTER logfile;
-	uint64_t cpu_cost;	// in microsec
-	uint64_t cpu_start;	// in microsec
-	char result[32];
-	uint32_t handle;
+	void * instance;             // 服务实例指针，在.so库中定义，服务的上下文指针
+	struct skynet_module * mod;  // .so模块指针
+	void * cb_ud;                // .回调时传入的上下文指针，lua服务为lua_State
+	skynet_cb cb;                // 回调函数
+	struct message_queue *queue; // 服务私有队列
+	ATOM_POINTER logfile;        // 服务统计日志
+	uint64_t cpu_cost;           // 服务cpu耗时性能指标，in microsec
+	uint64_t cpu_start;          // 服务最后启动时间，in microsec
+	char result[32];             // 性能指标查询结果
+	uint32_t handle;             // 服务标识符
 	int session_id;
-	ATOM_INT ref;
-	int message_count;
-	bool init;
-	bool endless;
-	bool profile;
+	ATOM_INT ref;                // 服务引用计数
+	int message_count;           // 处理的消息数
+	bool init;                   // 是否初始化
+	bool endless;                // 是否死循环
+	bool profile;                // 是否统计cpu耗时
 
 	CHECKCALLING_DECL
 };
 
 struct skynet_node {
-	ATOM_INT total;
-	int init;
-	uint32_t monitor_exit;
-	pthread_key_t handle_key;
-	bool profile;	// default is off
+	ATOM_INT total;           // 服务数
+	int init;                 // 是否初始化
+	uint32_t monitor_exit;    // 
+	pthread_key_t handle_key; // 主线程私有变量key，用来标识线程类型
+	bool profile;	          // 是否统计性能指标，default is off
 };
 
 static struct skynet_node G_NODE;
@@ -124,17 +124,18 @@ drop_message(struct skynet_message *msg, void *ud) {
 
 struct skynet_context * 
 skynet_context_new(const char * name, const char *param) {
+	// 查找该模块是否已加载，未加载则加载
 	struct skynet_module * mod = skynet_module_query(name);
-
 	if (mod == NULL)
 		return NULL;
 
+    // 创建模块
 	void *inst = skynet_module_instance_create(mod);
 	if (inst == NULL)
 		return NULL;
+	// 为模块创建一个服务
 	struct skynet_context * ctx = skynet_malloc(sizeof(*ctx));
 	CHECKCALLING_INIT(ctx)
-
 	ctx->mod = mod;
 	ctx->instance = inst;
 	ATOM_INIT(&ctx->ref , 2);
@@ -142,35 +143,40 @@ skynet_context_new(const char * name, const char *param) {
 	ctx->cb_ud = NULL;
 	ctx->session_id = 0;
 	ATOM_INIT(&ctx->logfile, (uintptr_t)NULL);
-
 	ctx->init = false;
 	ctx->endless = false;
-
 	ctx->cpu_cost = 0;
 	ctx->cpu_start = 0;
 	ctx->message_count = 0;
 	ctx->profile = G_NODE.profile;
 	// Should set to 0 first to avoid skynet_handle_retireall get an uninitialized handle
 	ctx->handle = 0;	
+	// 注册一个服务
 	ctx->handle = skynet_handle_register(ctx);
+	// 创建服务私有队列
 	struct message_queue * queue = ctx->queue = skynet_mq_create(ctx->handle);
 	// init function maybe use ctx->handle, so it must init at last
+    // 增加G_NODE记录的服务数，包括harbor，所以skynet_harbor_start()需要调用skynet_context_reserve()减少服务数
 	context_inc();
 
 	CHECKCALLING_BEGIN(ctx)
+	// 初始化模块
 	int r = skynet_module_instance_init(mod, inst, ctx, param);
 	CHECKCALLING_END(ctx)
 	if (r == 0) {
+		// 减少引用，只被全局消息队列引用
 		struct skynet_context * ret = skynet_context_release(ctx);
 		if (ret) {
 			ctx->init = true;
 		}
+		// 将服务私有队列加入全局消息队列
 		skynet_globalmq_push(queue);
 		if (ret) {
 			skynet_error(ret, "LAUNCH %s %s", name, param ? param : "");
 		}
 		return ret;
 	} else {
+		// 初始化出错
 		skynet_error(ctx, "FAILED launch %s", name);
 		uint32_t handle = ctx->handle;
 		skynet_context_release(ctx);
@@ -202,6 +208,7 @@ skynet_context_reserve(struct skynet_context *ctx) {
 	skynet_context_grab(ctx);
 	// don't count the context reserved, because skynet abort (the worker threads terminate) only when the total context is 0 .
 	// the reserved context will be release at last.
+	// 减少G_NODE.total数量，因为harbor不需要计数
 	context_dec();
 }
 
@@ -215,6 +222,7 @@ delete_context(struct skynet_context *ctx) {
 	skynet_mq_mark_release(ctx->queue);
 	CHECKCALLING_DESTROY(ctx)
 	skynet_free(ctx);
+    // 减少G_NODE.total数量
 	context_dec();
 }
 
@@ -229,11 +237,14 @@ skynet_context_release(struct skynet_context *ctx) {
 
 int
 skynet_context_push(uint32_t handle, struct skynet_message *message) {
+	// 获取服务，增加服务引用
 	struct skynet_context * ctx = skynet_handle_grab(handle);
 	if (ctx == NULL) {
 		return -1;
 	}
+	// 将消息添加到队尾
 	skynet_mq_push(ctx->queue, message);
+	// 引用减1
 	skynet_context_release(ctx);
 
 	return 0;
@@ -298,13 +309,14 @@ skynet_context_dispatchall(struct skynet_context * ctx) {
 struct message_queue * 
 skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue *q, int weight) {
 	if (q == NULL) {
+		// 从全局消息队列pop一个私有队列，worker独占服务
 		q = skynet_globalmq_pop();
 		if (q==NULL)
 			return NULL;
 	}
 
+    // 获取队列对应的服务，服务引用加1
 	uint32_t handle = skynet_mq_handle(q);
-
 	struct skynet_context * ctx = skynet_handle_grab(handle);
 	if (ctx == NULL) {
 		struct drop_t d = { handle };
@@ -316,10 +328,12 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 	struct skynet_message msg;
 
 	for (i=0;i<n;i++) {
+		// 从私有队列pop一个消息
 		if (skynet_mq_pop(q,&msg)) {
 			skynet_context_release(ctx);
 			return skynet_globalmq_pop();
 		} else if (i==0 && weight >= 0) {
+			// 根据线程权重计算可以处理的消息数
 			n = skynet_mq_length(q);
 			n >>= weight;
 		}
@@ -328,18 +342,23 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 			skynet_error(ctx, "May overload, message queue length = %d", overload);
 		}
 
+        // 触发监视器
 		skynet_monitor_trigger(sm, msg.source , handle);
 
 		if (ctx->cb == NULL) {
+			// 没有回调函数的消息丢掉
 			skynet_free(msg.data);
 		} else {
+			// 处理消息
 			dispatch_message(ctx, &msg);
 		}
 
+        // 重置监视器
 		skynet_monitor_trigger(sm, 0,0);
 	}
 
 	assert(q == ctx->queue);
+	// 从全局消息队列pop下一个私有队列，并将q push，如果全局消息队列为空则不push
 	struct message_queue *nq = skynet_globalmq_pop();
 	if (nq) {
 		// If global mq is not empty , push q back, and return next queue (nq)
@@ -347,6 +366,7 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 		skynet_globalmq_push(q);
 		q = nq;
 	} 
+	// 减少引用
 	skynet_context_release(ctx);
 
 	return q;
@@ -711,6 +731,7 @@ skynet_send(struct skynet_context * context, uint32_t source, uint32_t destinati
 	}
 	_filter_args(context, type, &session, (void **)&data, &sz);
 
+    // 发给自己
 	if (source == 0) {
 		source = context->handle;
 	}
@@ -813,11 +834,12 @@ skynet_globalinit(void) {
 	ATOM_INIT(&G_NODE.total , 0);
 	G_NODE.monitor_exit = 0;
 	G_NODE.init = 1;
+    // 为线程创建一个私有变量存储线程类型
 	if (pthread_key_create(&G_NODE.handle_key, NULL)) {
 		fprintf(stderr, "pthread_key_create failed");
 		exit(1);
 	}
-	// set mainthread's key
+	// 调用pthread_key_setspcific()设置私有变量
 	skynet_initthread(THREAD_MAIN);
 }
 

@@ -12,21 +12,21 @@
 #define MAX_SLOT_SIZE 0x40000000
 
 struct handle_name {
-	char * name;
-	uint32_t handle;
+	char * name;                   // 服务名
+	uint32_t handle;               // 服务标识符
 };
 
 struct handle_storage {
-	struct rwlock lock;
+	struct rwlock lock;            // 锁
 
-	uint32_t harbor;
-	uint32_t handle_index;
-	int slot_size;
-	struct skynet_context ** slot;
+	uint32_t harbor;               // 节点标识符
+	uint32_t handle_index;         // 用于加快标识符插入
+	int slot_size;                 // 服务数组大小，框架提供4个服务logger、gate、snlua、harbor，默认大小为4
+	struct skynet_context ** slot; // 服务数组
 	
-	int name_cap;
-	int name_count;
-	struct handle_name *name;
+	int name_cap;                  // 服务名数组大小
+	int name_count;                // 服务名数量
+	struct handle_name *name;      // 服务名数组，用于通过服务名二分查找服务标识符
 };
 
 static struct handle_storage *H = NULL;
@@ -40,6 +40,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 	for (;;) {
 		int i;
 		uint32_t handle = s->handle_index;
+		// 从s->handle_index开始遍历，找到一个空槽存储新服务
 		for (i=0;i<s->slot_size;i++,handle++) {
 			if (handle > HANDLE_MASK) {
 				// 0 is reserved
@@ -56,6 +57,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 				return handle;
 			}
 		}
+		// 没有空槽，扩容s->slot_size * 2
 		assert((s->slot_size*2 - 1) <= HANDLE_MASK);
 		struct skynet_context ** new_slot = skynet_malloc(s->slot_size * 2 * sizeof(struct skynet_context *));
 		memset(new_slot, 0, s->slot_size * 2 * sizeof(struct skynet_context *));
@@ -144,6 +146,7 @@ skynet_handle_grab(uint32_t handle) {
 	struct skynet_context * ctx = s->slot[hash];
 	if (ctx && skynet_context_handle(ctx) == handle) {
 		result = ctx;
+		// 增加引用
 		skynet_context_grab(result);
 	}
 
@@ -212,6 +215,7 @@ static const char *
 _insert_name(struct handle_storage *s, const char * name, uint32_t handle) {
 	int begin = 0;
 	int end = s->name_count - 1;
+	// 通过服务名二分查找，如果不存在，则插入一个新的服务名
 	while (begin<=end) {
 		int mid = (begin+end)/2;
 		struct handle_name *n = &s->name[mid];
@@ -247,12 +251,13 @@ void
 skynet_handle_init(int harbor) {
 	assert(H==NULL);
 	struct handle_storage * s = skynet_malloc(sizeof(*H));
+	// 数组从4开始，扩容时*2
 	s->slot_size = DEFAULT_SLOT_SIZE;
 	s->slot = skynet_malloc(s->slot_size * sizeof(struct skynet_context *));
 	memset(s->slot, 0, s->slot_size * sizeof(struct skynet_context *));
 
 	rwlock_init(&s->lock);
-	// reserve 0 for system
+	// 0保留给harbor
 	s->harbor = (uint32_t) (harbor & 0xff) << HANDLE_REMOTE_SHIFT;
 	s->handle_index = 1;
 	s->name_cap = 2;
