@@ -395,7 +395,7 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 	lua_setfield(L, LUA_REGISTRYINDEX, "LUA_NOENV");
 	// 加载所有必要的lua库
 	luaL_openlibs(L);
-  // 将init_profile作为skynet.profile作为库导入lua
+	// 将init_profile作为skynet.profile作为库导入lua
 	luaL_requiref(L, "skynet.profile", init_profile, 0);
 
 	int profile_lib = lua_gettop(L);
@@ -408,11 +408,11 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 
 	lua_settop(L, profile_lib-1);
 
-  // 将ctx导入虚拟机
+	// 将ctx导入虚拟机
 	lua_pushlightuserdata(L, ctx);
 	lua_setfield(L, LUA_REGISTRYINDEX, "skynet_context");
 
-  // 将codecache作为skynet.codecache作为库导入lua
+	// 将codecache作为skynet.codecache作为库导入lua
 	luaL_requiref(L, "skynet.codecache", codecache , 0);
 	lua_pop(L,1);
 
@@ -438,7 +438,7 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 	lua_pushcfunction(L, traceback);
 	assert(lua_gettop(L) == 1);
 
-  // 加载loader.lua, 参数为"bootstrap"
+	// 加载loader.lua, 参数为"bootstrap"
 	const char * loader = optstring(ctx, "lualoader", "./lualib/loader.lua");
 	int r = luaL_loadfile(L,loader); // 出错时调用栈底的traceback
 	if (r != LUA_OK) {

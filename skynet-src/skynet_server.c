@@ -129,7 +129,7 @@ skynet_context_new(const char * name, const char *param) {
 	if (mod == NULL)
 		return NULL;
 
-    // 创建模块
+	// 创建模块
 	void *inst = skynet_module_instance_create(mod);
 	if (inst == NULL)
 		return NULL;
@@ -156,7 +156,7 @@ skynet_context_new(const char * name, const char *param) {
 	// 创建服务私有队列
 	struct message_queue * queue = ctx->queue = skynet_mq_create(ctx->handle);
 	// init function maybe use ctx->handle, so it must init at last
-    // 增加G_NODE记录的服务数，包括harbor，所以skynet_harbor_start()需要调用skynet_context_reserve()减少服务数
+	// 增加G_NODE记录的服务数，包括harbor，所以skynet_harbor_start()需要调用skynet_context_reserve()减少服务数
 	context_inc();
 
 	CHECKCALLING_BEGIN(ctx)
@@ -222,7 +222,7 @@ delete_context(struct skynet_context *ctx) {
 	skynet_mq_mark_release(ctx->queue);
 	CHECKCALLING_DESTROY(ctx)
 	skynet_free(ctx);
-    // 减少G_NODE.total数量
+	// 减少G_NODE.total数量
 	context_dec();
 }
 
@@ -315,7 +315,7 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 			return NULL;
 	}
 
-    // 获取队列对应的服务，服务引用加1
+	// 获取队列对应的服务，服务引用加1
 	uint32_t handle = skynet_mq_handle(q);
 	struct skynet_context * ctx = skynet_handle_grab(handle);
 	if (ctx == NULL) {
@@ -342,7 +342,7 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 			skynet_error(ctx, "May overload, message queue length = %d", overload);
 		}
 
-        // 触发监视器
+		// 触发监视器
 		skynet_monitor_trigger(sm, msg.source , handle);
 
 		if (ctx->cb == NULL) {
@@ -353,7 +353,7 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 			dispatch_message(ctx, &msg);
 		}
 
-        // 重置监视器
+		// 重置监视器
 		skynet_monitor_trigger(sm, 0,0);
 	}
 
@@ -731,7 +731,7 @@ skynet_send(struct skynet_context * context, uint32_t source, uint32_t destinati
 	}
 	_filter_args(context, type, &session, (void **)&data, &sz);
 
-    // 发给自己
+	// 发给自己
 	if (source == 0) {
 		source = context->handle;
 	}
@@ -834,7 +834,7 @@ skynet_globalinit(void) {
 	ATOM_INIT(&G_NODE.total , 0);
 	G_NODE.monitor_exit = 0;
 	G_NODE.init = 1;
-    // 为线程创建一个私有变量存储线程类型
+	// 为线程创建一个私有变量存储线程类型
 	if (pthread_key_create(&G_NODE.handle_key, NULL)) {
 		fprintf(stderr, "pthread_key_create failed");
 		exit(1);

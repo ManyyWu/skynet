@@ -188,7 +188,7 @@ static void
 start(int thread) {
 	pthread_t pid[thread+3];
 
-    // 创建监视器，用于监视死锁或死循环
+	// 创建监视器，用于监视死锁或死循环
 	struct monitor *m = skynet_malloc(sizeof(*m));
 	memset(m, 0, sizeof(*m));
 	m->count = thread;
@@ -207,7 +207,7 @@ start(int thread) {
 		exit(1);
 	}
 
-    // 创建监视器线程
+	// 创建监视器线程
 	create_thread(&pid[0], thread_monitor, m);
 	// 创建定时器线程
 	create_thread(&pid[1], thread_timer, m);
@@ -231,11 +231,11 @@ start(int thread) {
 		}
 		create_thread(&pid[i+3], thread_worker, &wp[i]);
 	}
-    // 等待所有线程结束
+	// 等待所有线程结束
 	for (i=0;i<thread+3;i++) {
 		pthread_join(pid[i], NULL); 
 	}
-    // 释放监视器
+	// 释放监视器
 	free_monitor(m);
 }
 
@@ -275,7 +275,7 @@ skynet_start(struct skynet_config * config) {
 	sigfillset(&sa.sa_mask);
 	sigaction(SIGHUP, &sa, NULL);
 
-    // 初始化守护进程
+	// 初始化守护进程
 	if (config->daemon) {
 		if (daemon_init(config->daemon)) {
 			exit(1);
@@ -295,17 +295,17 @@ skynet_start(struct skynet_config * config) {
 	skynet_socket_init();
 	// 初始化统计日志开关
 	skynet_profile_enable(config->profile);
-    // 创建第一个服务logger.so
+	// 创建第一个服务logger.so
 	struct skynet_context *ctx = skynet_context_new(config->logservice, config->logger);
 	if (ctx == NULL) {
 		fprintf(stderr, "Can't launch %s service\n", config->logservice);
 		exit(1);
 	}
-    // 设置服务名
+	// 设置服务名
 	skynet_handle_namehandle(skynet_context_handle(ctx), "logger");
-    // 创建引导加载服务snlua.so，这时候还没启动logger服务，需要传入ctx指针用于打印日志
+	// 创建引导加载服务snlua.so，这时候还没启动logger服务，需要传入ctx指针用于打印日志
 	bootstrap(ctx, config->bootstrap);
-    // 创建各种线程，并等待所有线程结束
+	// 创建各种线程，并等待所有线程结束
 	start(config->thread);
 
 	// harbor_exit may call socket send, so it should exit before socket_free

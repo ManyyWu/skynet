@@ -126,14 +126,14 @@ main(int argc, char *argv[]) {
 		return 1;
 	}
 
-    // 初始化全局节点信息
+	// 初始化全局节点信息
 	skynet_globalinit();
 	// 为主线程创建lua虚拟机E
 	skynet_env_init();
-    // 忽略SIGPIPE信号
+	// 忽略SIGPIPE信号
 	sigign();
 
-    // skynet配置
+  // skynet配置
 	struct skynet_config config;
 
 #ifdef LUA_CACHELIB
@@ -141,11 +141,11 @@ main(int argc, char *argv[]) {
 	luaL_initcodecache();
 #endif
 
-    // 创建一个临时lua虚拟机用于读取配置
+	// 创建一个临时lua虚拟机用于读取配置
 	struct lua_State *L = luaL_newstate();
 	// 链接一些必要的lua库，详见linit.c
 	luaL_openlibs(L);
-    // 将load_config作为一个代码块加载到lua虚拟机
+	// 将load_config作为一个代码块加载到lua虚拟机
 	// 名字为"=[skynet config]"，这个名字被用于出错信息和调试信息
 	// 参数4：t表示字符串，b表示二进制代码
 	int err =  luaL_loadbufferx(L, load_config, strlen(load_config), "=[skynet config]", "t");
@@ -160,7 +160,7 @@ main(int argc, char *argv[]) {
 	}
 	// 从虚拟机栈中读取变量值作为全局变量存储到主线程lua虚拟机E中
 	_init_env(L);
-    // 从lua虚拟机E中读取配置，如果为nil则使用默认值
+	// 从lua虚拟机E中读取配置，如果为nil则使用默认值
 	config.thread =  optint("thread",8);
 	config.module_path = optstring("cpath","./cservice/?.so");
 	config.harbor = optint("harbor", 1);
@@ -169,9 +169,9 @@ main(int argc, char *argv[]) {
 	config.logger = optstring("logger", NULL);
 	config.logservice = optstring("logservice", "logger");
 	config.profile = optboolean("profile", 1);
-    // 关闭临时lua虚拟机
+	// 关闭临时lua虚拟机
 	lua_close(L);
-    // 初始化skynet线程及服务
+	// 初始化skynet线程及服务
 	skynet_start(&config);
 	// 反初始化全局节点信息
 	skynet_globalexit();

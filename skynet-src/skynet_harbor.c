@@ -36,7 +36,7 @@ skynet_harbor_init(int harbor) {
 
 void
 skynet_harbor_start(void *ctx) {
-    // 创建服务时会增加G_NODE记录的服务数，包括harbor，所以skynet_harbor_start()需要调用skynet_context_reserve()减少服务数
+	// 创建服务时会增加G_NODE记录的服务数，包括harbor，所以skynet_harbor_start()需要调用skynet_context_reserve()减少服务数
 	// harbor服务只能被skynet_harbor_exit释放
 	skynet_context_reserve(ctx);
 	REMOTE = ctx;
