@@ -245,7 +245,7 @@ bootstrap(struct skynet_context * logger, const char * cmdline) {
 	char name[sz+1];
 	char args[sz+1];
 	int arg_pos;
-	// 默认配置下，启动snlua服务，参数为bootstrap
+	// 默认配置下，启动snlua服务（沙盒服务），参数为bootstrap
 	// snlua服务将会执行service/bootstrap.lua脚本
 	sscanf(cmdline, "%s", name);  
 	arg_pos = strlen(name);

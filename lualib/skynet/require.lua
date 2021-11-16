@@ -26,7 +26,7 @@ do
 			return m
 		end
 
-		-- 主线程直接调用_G.require
+		-- 主协程直接调用_G.require
 		local co, main = coroutine.running()
 		if main then
 			return require(name)

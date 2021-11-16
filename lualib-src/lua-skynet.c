@@ -104,12 +104,20 @@ forward_cb(struct skynet_context * context, void * ud, int type, int session, ui
 
 static int
 lcallback(lua_State *L) {
+	// 函数为闭包，ctx为上值
 	struct skynet_context * context = lua_touserdata(L, lua_upvalueindex(1));
-	int forward = lua_toboolean(L, 2);
-	luaL_checktype(L,1,LUA_TFUNCTION);
-	lua_settop(L,1);
+
+	int forward = lua_toboolean(L, 2); // 可选参数2 forward
+	luaL_checktype(L,1,LUA_TFUNCTION); // 检查参数1 func
+	lua_settop(L,1); // 弹出参数2
+
+	// registry[_cb] = func
 	lua_rawsetp(L, LUA_REGISTRYINDEX, _cb);
 
+	// 获取主协程指针
+	// coroutine创建时默认会创建一个主协程（即global_State），除了lua_close不会回收，而其他coroutine会被gc
+	// 如果不能保证协程一直被引用，C代码中需要存储lua_State用于未来使用，需要保存主协程的lua_State
+	// https://blog.gotocoding.com/archives/345
 	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
 	lua_State *gL = lua_tothread(L,-1);
 
@@ -506,18 +514,22 @@ luaopen_skynet_core(lua_State *L) {
 		{ NULL, NULL },
 	};
 
+	// 创建table
 	lua_createtable(L, 0, sizeof(l)/sizeof(l[0]) + sizeof(l2)/sizeof(l2[0]) -2);
 
+	// 将ctx压入栈中（snlua服务init_cb中关联）
 	lua_getfield(L, LUA_REGISTRYINDEX, "skynet_context");
+
 	struct skynet_context *ctx = lua_touserdata(L,-1);
 	if (ctx == NULL) {
 		return luaL_error(L, "Init skynet context first");
 	}
 
-
+	// 每个函数创建一个闭包（关联nups个上值），添加到table
 	luaL_setfuncs(L,l,1);
 
 	luaL_setfuncs(L,l2,0);
 
+	// 返回table
 	return 1;
 }

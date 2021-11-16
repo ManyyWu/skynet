@@ -408,7 +408,7 @@ init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t s
 
 	lua_settop(L, profile_lib-1);
 
-	// 将ctx导入虚拟机
+	// registry["skynet_context"] = ctx
 	lua_pushlightuserdata(L, ctx);
 	lua_setfield(L, LUA_REGISTRYINDEX, "skynet_context");
 
