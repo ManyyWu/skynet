@@ -949,7 +949,9 @@ end
 -- skynet.start之前可以通过skynet.init注册函数用于从其他服务获取信息，在start_func调用之前执行
 -- 如果在start_func里面调用skynet.init，注册的函数会在下一次调用skynet.init_service时才会执行
 function skynet.start(start_func)
+	-- 设置回调函数为skynet.dispatch_message
 	c.callback(skynet.dispatch_message)
+	-- 下一帧处理start_func函数
 	init_thread = skynet.timeout(0, function()
 		skynet.init_service(start_func)
 		init_thread = nil

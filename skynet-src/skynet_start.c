@@ -304,6 +304,7 @@ skynet_start(struct skynet_config * config) {
 	// 设置服务名
 	skynet_handle_namehandle(skynet_context_handle(ctx), "logger");
 	// 创建引导加载服务snlua.so，这时候还没启动logger服务，需要传入ctx指针用于打印日志
+	// lua服务都由snlua服务创建虚拟机并加载
 	bootstrap(ctx, config->bootstrap);
 	// 创建各种线程，并等待所有线程结束
 	start(config->thread);

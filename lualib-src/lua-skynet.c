@@ -64,8 +64,9 @@ _cb(struct skynet_context * context, void * ud, int type, int session, uint32_t 
 	} else {
 		assert(top == 2);
 	}
+	// 将_cb复制到栈顶
 	lua_pushvalue(L,2);
-
+	// 参数
 	lua_pushinteger(L, type);
 	lua_pushlightuserdata(L, (void *)msg);
 	lua_pushinteger(L,sz);
@@ -116,13 +117,13 @@ lcallback(lua_State *L) {
 
 	// 获取主协程指针
 	// coroutine创建时默认会创建一个主协程（即global_State），除了lua_close不会回收，而其他coroutine会被gc
-	// 如果不能保证协程一直被引用，C代码中需要存储lua_State用于未来使用，需要保存主协程的lua_State
+	// 如果不能保证协程一直被引用，C代码中存储lua_State用于未来使用，最好保存主协程的lua_State
 	// https://blog.gotocoding.com/archives/345
 	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
 	lua_State *gL = lua_tothread(L,-1);
 
 	if (forward) {
-		skynet_callback(context, gL, forward_cb);
+		skynet_callback(context, gL, forward_cb); // 消息派发后不释放，用于转发
 	} else {
 		skynet_callback(context, gL, _cb);
 	}

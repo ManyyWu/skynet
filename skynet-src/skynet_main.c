@@ -133,7 +133,7 @@ main(int argc, char *argv[]) {
 	// ºöÂÔSIGPIPEĞÅºÅ
 	sigign();
 
-  // skynetÅäÖÃ
+	// skynetÅäÖÃ
 	struct skynet_config config;
 
 #ifdef LUA_CACHELIB

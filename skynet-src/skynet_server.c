@@ -124,12 +124,12 @@ drop_message(struct skynet_message *msg, void *ud) {
 
 struct skynet_context * 
 skynet_context_new(const char * name, const char *param) {
-	// 查找该模块是否已加载，未加载则加载
+	// 查找.so模块，未加载则加载
 	struct skynet_module * mod = skynet_module_query(name);
 	if (mod == NULL)
 		return NULL;
 
-	// 创建模块
+	// 创建模块实例
 	void *inst = skynet_module_instance_create(mod);
 	if (inst == NULL)
 		return NULL;
@@ -160,7 +160,7 @@ skynet_context_new(const char * name, const char *param) {
 	context_inc();
 
 	CHECKCALLING_BEGIN(ctx)
-	// 初始化模块
+	// 初始化模块实例
 	int r = skynet_module_instance_init(mod, inst, ctx, param);
 	CHECKCALLING_END(ctx)
 	if (r == 0) {
@@ -507,7 +507,7 @@ cmd_launch(struct skynet_context * context, const char * param) {
 	char tmp[sz+1];
 	strcpy(tmp,param);
 	char * args = tmp;
-	char * mod = strsep(&args, " \t\r\n");
+	char * mod = strsep(&args, " \t\r\n"); // 参数\t分割
 	args = strsep(&args, "\r\n");
 	struct skynet_context * inst = skynet_context_new(mod,args);
 	if (inst == NULL) {
