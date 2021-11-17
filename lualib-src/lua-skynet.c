@@ -64,7 +64,7 @@ _cb(struct skynet_context * context, void * ud, int type, int session, uint32_t 
 	} else {
 		assert(top == 2);
 	}
-	// 将_cb复制到栈顶
+	// 将skynet.dispatch_message复制到栈顶
 	lua_pushvalue(L,2);
 	// 参数
 	lua_pushinteger(L, type);
@@ -73,7 +73,10 @@ _cb(struct skynet_context * context, void * ud, int type, int session, uint32_t 
 	lua_pushinteger(L, session);
 	lua_pushinteger(L, source);
 
+	// function raw_dispatch_message(prototype, msg, sz, session, source)
 	r = lua_pcall(L, 5, 0 , trace);
+
+	// 执行完lua_gettop(L) == 2
 
 	if (r == LUA_OK) {
 		return 0;
@@ -112,7 +115,7 @@ lcallback(lua_State *L) {
 	luaL_checktype(L,1,LUA_TFUNCTION); // 检查参数1 func
 	lua_settop(L,1); // 弹出参数2
 
-	// registry[_cb] = func
+	// registry[func] = func
 	lua_rawsetp(L, LUA_REGISTRYINDEX, _cb);
 
 	// 获取主协程指针
@@ -189,15 +192,16 @@ lintcommand(lua_State *L) {
 	const char * parm = NULL;
 	char tmp[64];	// for integer parm
 	if (lua_gettop(L) == 2) {
-		if (lua_isnumber(L, 2)) {
+		if (lua_isnumber(L, 2)) { // "TIMEOUT", ti
 			int32_t n = (int32_t)luaL_checkinteger(L,2);
 			sprintf(tmp, "%d", n);
 			parm = tmp;
 		} else {
-			parm = luaL_checkstring(L,2);
+			parm = luaL_checkstring(L,2); // "TIMEOUT"
 		}
 	}
 
+	// 调用cmd_timeout
 	result = skynet_command(context, cmd, parm);
 	if (result) {
 		char *endptr = NULL; 

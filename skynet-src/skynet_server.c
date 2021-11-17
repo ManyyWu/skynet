@@ -419,8 +419,11 @@ struct command_func {
 static const char *
 cmd_timeout(struct skynet_context * context, const char * param) {
 	char * session_ptr = NULL;
+	// ti从字符串转int，WTF?
 	int ti = strtol(param, &session_ptr, 10);
+	// 生成session id
 	int session = skynet_context_newsession(context);
+	// 给自己发一条消息，lcallback中设置了回调
 	skynet_timeout(context->handle, ti, session);
 	sprintf(context->result, "%d", session);
 	return context->result;

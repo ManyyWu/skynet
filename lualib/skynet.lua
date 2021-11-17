@@ -372,10 +372,13 @@ end
 skynet.trace_timeout(false)	-- turn off by default
 
 function skynet.timeout(ti, func)
+	-- ti转字符串，执行命令cmd_timeout
 	local session = c.intcommand("TIMEOUT",ti)
 	assert(session)
+	-- 创建协程并挂起
 	local co = co_create_for_timeout(func, ti)
 	assert(session_id_coroutine[session] == nil)
+
 	session_id_coroutine[session] = co
 	return co	-- for debug
 end
