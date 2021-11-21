@@ -247,10 +247,13 @@ end
 local coroutine_pool = setmetatable({}, { __mode = "kv" })
 
 local function co_create(f)
+	-- 从协程池取出一个协程
 	local co = tremove(coroutine_pool)
 	if co == nil then
+		-- 协程池空了，创建一个协程
 		co = coroutine_create(function(...)
-			f(...)
+			f(...) -- 这一行只有协程创建时才执行
+
 			while true do
 				local session = session_coroutine_id[co]
 				if session and session ~= 0 then
@@ -271,17 +274,18 @@ local function co_create(f)
 					session_coroutine_id[co] = nil
 					session_coroutine_address[co] = nil
 				end
-
-				-- recycle co into pool
+				-- 清除upvalue
 				f = nil
+				-- 回收co
 				coroutine_pool[#coroutine_pool+1] = co
-				-- recv new main function f
-				f = coroutine_yield "SUSPEND"
-				f(coroutine_yield())
+				-- 协程创建时处于挂起状态，被唤醒时返回f
+				f = coroutine_yield "SUSPEND" -- yield1
+				-- 再次挂起，等待参数返回传入f
+				f(coroutine_yield())          -- yield2
 			end
 		end)
 	else
-		-- pass the main function f to coroutine, and restore running thread
+		-- 唤醒协程，yield1返回
 		local running = running_thread
 		coroutine_resume(co, f)
 		running_thread = running
@@ -378,7 +382,7 @@ function skynet.timeout(ti, func)
 	-- 创建协程并挂起
 	local co = co_create_for_timeout(func, ti)
 	assert(session_id_coroutine[session] == nil)
-
+	-- session映射co
 	session_id_coroutine[session] = co
 	return co	-- for debug
 end
@@ -783,6 +787,9 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 			local tag = session_coroutine_tracetag[co]
 			if tag then c.trace(tag, "resume") end
 			session_id_coroutine[session] = nil
+			-- 新建的协程: coroutine.resume第一次唤醒协程，将参数传入回调函数
+			-- 复用的协程: coroutine.resume唤醒协程，参数从yield2返回
+			-- yield2返回并进入下一个循环，yield1传入的"SUSPEND"作为参数传入suspend
 			suspend(co, coroutine_resume(co, true, msg, sz, session))
 		end
 	else
@@ -945,6 +952,7 @@ function skynet.init_service(start)
 		skynet.send(".launcher","lua", "ERROR")
 		skynet.exit()
 	else
+		-- 向.launcher发送LAUNCHOK
 		skynet.send(".launcher","lua", "LAUNCHOK")
 	end
 end
